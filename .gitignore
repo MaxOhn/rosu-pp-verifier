@@ -1,0 +1,7 @@
+/target
+expanded.rs
+/beatmaps
+/scores
+*.rkyv
+*.txt
+.env
