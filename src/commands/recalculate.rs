@@ -226,6 +226,7 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
                 speed_top_weighted_slider_factor: _,
                 nested_score_per_object: _,
                 legacy_score_base_multiplier: _,
+                maximum_legacy_combo_score,
             } = old_diff;
 
             *aim = perf.aim.into();
@@ -257,6 +258,7 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
                 .map(From::from)
                 .map_or(ArchivedOption::None, ArchivedOption::Some);
             *slider_factor = diff.slider_factor.into();
+            *maximum_legacy_combo_score = diff.maximum_legacy_combo_score.into();
         }
         ArchivedSimulateAttributes::Taiko {
             perf: old_perf,

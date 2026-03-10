@@ -14,6 +14,7 @@ define_attrs! {
         pub flashlight_difficulty: f64??,
         pub nested_score_per_object: f64,
         pub legacy_score_base_multiplier: f64,
+        pub maximum_legacy_combo_score: f64,
     }
 }
 

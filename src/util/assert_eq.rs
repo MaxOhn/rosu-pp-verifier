@@ -114,6 +114,7 @@ impl AssertEq<OsuPerformanceAttributes, OsuDifficultyAttributes>
             speed_top_weighted_slider_factor: _,
             nested_score_per_object: _,
             legacy_score_base_multiplier: _,
+            maximum_legacy_combo_score,
         } = diff;
 
         assert_eq_f64(&self.difficulty.stars, *star_rating, "star_rating")?;
@@ -155,6 +156,11 @@ impl AssertEq<OsuPerformanceAttributes, OsuDifficultyAttributes>
             &self.difficulty.slider_factor,
             *slider_factor,
             "slider_factor",
+        )?;
+        assert_eq_f64(
+            &self.difficulty.maximum_legacy_combo_score,
+            *maximum_legacy_combo_score,
+            "maximum_legacy_combo_score",
         )?;
 
         assert_eq_f64(&self.pp, *pp, "pp")?;
@@ -214,6 +220,7 @@ impl AssertEq<ArchivedOsuPerformanceAttributes, ArchivedOsuDifficultyAttributes>
             speed_top_weighted_slider_factor: _,
             nested_score_per_object: _,
             legacy_score_base_multiplier: _,
+            maximum_legacy_combo_score,
         } = diff;
 
         assert_eq_f64(
@@ -267,6 +274,11 @@ impl AssertEq<ArchivedOsuPerformanceAttributes, ArchivedOsuDifficultyAttributes>
             &self.difficulty.slider_factor,
             slider_factor.to_native(),
             "slider_factor",
+        )?;
+        assert_eq_f64(
+            &self.difficulty.maximum_legacy_combo_score,
+            maximum_legacy_combo_score.to_native(),
+            "maximum_legacy_combo_score",
         )?;
 
         assert_eq_f64(&self.pp, pp.to_native(), "pp")?;
