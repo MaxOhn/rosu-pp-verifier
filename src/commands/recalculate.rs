@@ -204,6 +204,10 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
                 flashlight,
                 effective_miss_count,
                 speed_deviation,
+                combo_based_estimated_miss_count: _,
+                score_based_estimated_miss_count: _,
+                aim_estimated_slider_breaks: _,
+                speed_estimated_slider_breaks: _,
                 pp,
             } = old_perf;
 
@@ -214,10 +218,14 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
                 aim_difficult_slider_count,
                 speed_difficulty,
                 speed_note_count,
+                slider_factor,
                 aim_difficult_strain_count,
                 speed_difficult_strain_count,
                 flashlight_difficulty,
-                slider_factor,
+                aim_top_weighted_slider_factor: _,
+                speed_top_weighted_slider_factor: _,
+                nested_score_per_object: _,
+                legacy_score_base_multiplier: _,
             } = old_diff;
 
             *aim = perf.aim.into();
@@ -261,7 +269,6 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
             let ArchivedTaikoPerformanceAttributes {
                 difficulty,
                 accuracy,
-                effective_miss_count,
                 estimated_unstable_rate,
                 pp,
             } = old_perf;
@@ -269,19 +276,13 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
             let ArchivedTaikoDifficultyAttributes {
                 star_rating,
                 max_combo,
-                stamina_difficulty,
-                mono_stamina_factor,
                 rhythm_difficulty,
-                colour_difficulty,
-                reading_difficulty,
-                rhythm_difficult_strains: _,
-                colour_difficult_strains: _,
-                stamina_difficult_strains: _,
+                mono_stamina_factor,
+                consistency_factor,
             } = old_diff;
 
             *difficulty = perf.difficulty.into();
             *accuracy = perf.accuracy.into();
-            *effective_miss_count = perf.effective_miss_count.into();
 
             if let Some(mut old_estimated_unstable_rate) =
                 ArchivedOption::as_seal(Seal::new(estimated_unstable_rate))
@@ -295,11 +296,9 @@ fn modify(old: Seal<'_, ArchivedSimulateObject>, new: ArchivableSimulateObject) 
 
             *star_rating = diff.star_rating.into();
             *max_combo = diff.max_combo.into();
-            *stamina_difficulty = diff.stamina_difficulty.into();
             *rhythm_difficulty = diff.rhythm_difficulty.into();
-            *colour_difficulty = diff.colour_difficulty.into();
-            *reading_difficulty = diff.reading_difficulty.into();
             *mono_stamina_factor = diff.mono_stamina_factor.into();
+            *consistency_factor = diff.consistency_factor.into();
         }
         ArchivedSimulateAttributes::Catch {
             perf: old_perf,
