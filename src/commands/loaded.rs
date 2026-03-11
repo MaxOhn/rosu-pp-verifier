@@ -1,8 +1,10 @@
 use std::{
+    env,
     fmt::Write,
     fs::File,
     ops::ControlFlow,
     process::{Command, Stdio},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -86,6 +88,8 @@ pub fn loaded(minutes: Option<u64>) {
     let mut indices = (0..scores.len() as u32).collect::<Vec<_>>();
     indices.shuffle(&mut rand::thread_rng());
 
+    let thread_count: usize = env::var("THREAD_COUNT").unwrap().parse().unwrap();
+
     if let Some(minutes) = minutes {
         let start = Instant::now();
 
@@ -102,25 +106,33 @@ pub fn loaded(minutes: Option<u64>) {
         .with_style(style);
 
         let mut since_last = start.elapsed();
+        let scores = ArchivedVec::as_slice_seal(scores);
+        let scores = unsafe { scores.unseal_unchecked() };
 
-        iterate_scores(
-            ArchivedVec::as_slice_seal(scores),
-            &indices,
-            &progress,
-            || {
-                let elapsed = start.elapsed();
+        for indices in indices.chunks(scores.len().div_ceil(thread_count)) {
+            thread::scope(|scope| {
+                scope.spawn(|| {
+                    iterate_scores(
+                        scores,
+                        indices,
+                        &progress,
+                        || {
+                            let elapsed = start.elapsed();
 
-                if elapsed >= duration {
-                    return ControlFlow::Break(());
-                }
+                            if elapsed >= duration {
+                                return ControlFlow::Break(());
+                            }
 
-                progress.inc((elapsed - since_last).as_millis() as u64);
-                since_last = elapsed;
+                            progress.inc((elapsed - since_last).as_millis() as u64);
+                            since_last = elapsed;
 
-                ControlFlow::Continue(())
-            },
-            || scores_progress.inc(),
-        );
+                            ControlFlow::Continue(())
+                        },
+                        || scores_progress.inc(),
+                    );
+                });
+            });
+        }
 
         progress.finish();
     } else {
@@ -130,20 +142,29 @@ pub fn loaded(minutes: Option<u64>) {
             ProgressBar::with_draw_target(Some(left as u64), ProgressDrawTarget::stderr())
                 .with_style(style);
 
-        iterate_scores(
-            ArchivedVec::as_slice_seal(scores),
-            &indices,
-            &progress,
-            || ControlFlow::Continue(()),
-            || progress.inc(1),
-        );
+        let scores = ArchivedVec::as_slice_seal(scores);
+        let scores = unsafe { scores.unseal_unchecked() };
+
+        for indices in indices.chunks(scores.len().div_ceil(thread_count)) {
+            thread::scope(|scope| {
+                scope.spawn(|| {
+                    iterate_scores(
+                        scores,
+                        indices,
+                        &progress,
+                        || ControlFlow::Continue(()),
+                        || progress.inc(1),
+                    );
+                });
+            });
+        }
 
         progress.finish();
     }
 }
 
 fn iterate_scores<B, A>(
-    mut scores: Seal<'_, [ArchivedDataScore]>,
+    scores: &mut [ArchivedDataScore],
     indices: &[u32],
     progress: &ProgressBar,
     mut before: B,
@@ -153,7 +174,7 @@ fn iterate_scores<B, A>(
     A: FnMut(),
 {
     for i in indices {
-        let score = scores.as_mut().index(*i as usize);
+        let score = Seal::new(&mut scores[*i as usize]);
 
         if let ControlFlow::Break(()) = before() {
             return;
