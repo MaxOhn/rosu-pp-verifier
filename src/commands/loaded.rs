@@ -34,32 +34,44 @@ use crate::{
 
 use self::progress::ScoresProgress;
 
-fn _check_done() {
-    let input = match File::options().read(true).open(&*LOAD_OUTPUT) {
-        Ok(input) => match unsafe { Mmap::map(&input) } {
-            Ok(mmap) => mmap,
-            Err(err) => return println!("Failed to mmap input: {err}"),
-        },
-        Err(err) => return println!("Failed to open input: {err}"),
-    };
+struct Done {
+    count: usize,
+    total: usize,
+}
 
-    let scores = rkyv::access::<ArchivedVec<ArchivedDataScore>, Panic>(&input).always_ok();
-    let done = scores.iter().filter(|score| score.checked).count();
-    panic!(
-        "Done: {done}/{} ({:.4})%",
-        scores.len(),
-        ((done * 100) as f64 / scores.len() as f64)
-    );
+impl Done {
+    fn new() -> Self {
+        let input = match File::options().read(true).open(&*LOAD_OUTPUT) {
+            Ok(input) => match unsafe { Mmap::map(&input) } {
+                Ok(mmap) => mmap,
+                Err(err) => panic!("Failed to mmap input: {err}"),
+            },
+            Err(err) => panic!("Failed to open input: {err}"),
+        };
+
+        let scores = rkyv::access::<ArchivedVec<ArchivedDataScore>, Panic>(&input).always_ok();
+        let done = scores.iter().filter(|score| score.checked).count();
+
+        Self {
+            count: done,
+            total: scores.len(),
+        }
+    }
 }
 
 pub fn loaded(minutes: Option<u64>) {
-    // _check_done();
+    let Done { count, total } = Done::new();
+
+    eprintln!(
+        "Done: {count}/{total} ({:.4})%",
+        ((count * 100) as f64 / total as f64)
+    );
+
+    let left = total - count;
 
     if !cfg!(debug_assertions) {
         panic!("Do not compare scores on release mode");
     }
-
-    eprintln!("Comparing...");
 
     let mut input = match File::options().read(true).write(true).open(&*LOAD_OUTPUT) {
         Ok(input) => match unsafe { MmapMut::map_mut(&input) } {
@@ -78,7 +90,7 @@ pub fn loaded(minutes: Option<u64>) {
         let start = Instant::now();
 
         let duration = Duration::from_secs(minutes * 60);
-        let scores_progress = ScoresProgress::new(scores.len());
+        let scores_progress = ScoresProgress::new(left);
         let template = format!("{{scores}} {{wide_bar}} {{elapsed}}/{duration:?}");
         let style = ProgressStyle::with_template(&template)
             .unwrap()
@@ -115,7 +127,7 @@ pub fn loaded(minutes: Option<u64>) {
         let template = "Scores: {pos}/{len} | ETA: {eta} {wide_bar} {elapsed}";
         let style = ProgressStyle::with_template(template).unwrap();
         let progress =
-            ProgressBar::with_draw_target(Some(scores.len() as u64), ProgressDrawTarget::stderr())
+            ProgressBar::with_draw_target(Some(left as u64), ProgressDrawTarget::stderr())
                 .with_style(style);
 
         iterate_scores(
@@ -135,7 +147,7 @@ fn iterate_scores<B, A>(
     indices: &[u32],
     progress: &ProgressBar,
     mut before: B,
-    mut after: A,
+    mut increment: A,
 ) where
     B: FnMut() -> ControlFlow<(), ()>,
     A: FnMut(),
@@ -147,26 +159,28 @@ fn iterate_scores<B, A>(
             return;
         }
 
-        calculate_score(score, progress);
-        after();
+        if calculate_score(score, progress) {
+            increment();
+        }
     }
 }
 
-fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
+/// Returns whether the progress bar should be incremented.
+fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) -> bool {
     if score.checked {
-        return;
+        return false;
     } else if score.data.mods.varying_clock_rate() {
         munge!(let ArchivedDataScore { mut checked, .. } = score);
         *checked = true;
 
         // rosu-pp does not handle varying clock rate
-        return;
+        return true;
     } else if score.data.mods.contains_random() && score.mode == 0 {
         // rosu-pp does not handle the random mod in osu!standard
-        return;
+        return false;
     } else if score.mode == 0 && score.lazer && score.data.mods.contains_classic() {
         // osu-tools doesn't handle CL lazer scores correctly
-        return;
+        return false;
     }
 
     let map_path = format!("{}{}.osu", &*MAP_PATH, score.map_id);
@@ -180,7 +194,11 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
         1 => GameMode::Taiko,
         2 => GameMode::Catch,
         3 => GameMode::Mania,
-        other => return println!("Invalid mode {other}"),
+        other => {
+            println!("Invalid mode {other}");
+
+            return false;
+        }
     };
 
     let mode_str = match mode {
@@ -298,17 +316,33 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
 
     let child = match cmd.stdout(Stdio::piped()).spawn() {
         Ok(child) => child,
-        Err(err) => return println!("Failed to spawn child: {err}"),
+        Err(err) => {
+            println!("Failed to spawn child: {err}");
+
+            return false;
+        }
     };
 
     let map = match Beatmap::from_path(&map_path) {
         Ok(map) => map,
-        Err(err) => return println!("Failed to open map at `{map_path}`: {err}"),
+        Err(err) => {
+            println!("Failed to open map at `{map_path}`: {err}");
+
+            return false;
+        }
     };
+
+    if let Err(err) = map.check_suspicion() {
+        progress.suspend(|| println!("[SUSPICIOUS] map_id={} ({err})", score.map_id));
+    }
 
     let mods = match score.data.mods.convert(mode) {
         Ok(mods) => mods,
-        Err(err) => return println!("Failed to convert mods: {err}"),
+        Err(err) => {
+            println!("Failed to convert mods: {err}");
+
+            return false;
+        }
     };
 
     let mut rosu_str = String::new();
@@ -347,7 +381,9 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                 })
                 .large_tick_hits(stats.large_tick_hit.to_native()))
             .calculate() else {
-                return println!("Failed to convert map at `{map_path}` to Osu");
+                println!("Failed to convert map at `{map_path}` to Osu");
+
+                return false;
             };
 
             PerformanceAttributes::Osu(attrs)
@@ -360,7 +396,9 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                 .n100(stats.ok.to_native())
                 .misses(stats.miss.to_native()))
             .calculate() else {
-                return println!("Failed to convert map at `{map_path}` to Taiko");
+                println!("Failed to convert map at `{map_path}` to Taiko");
+
+                return false;
             };
 
             PerformanceAttributes::Taiko(attrs)
@@ -374,7 +412,9 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                 .tiny_droplets(stats.small_tick_hit.to_native())
                 .misses(stats.miss.to_native()))
             .calculate() else {
-                return println!("Failed to convert map at `{map_path}` to Catch");
+                println!("Failed to convert map at `{map_path}` to Catch");
+
+                return false;
             };
 
             PerformanceAttributes::Catch(attrs)
@@ -390,7 +430,9 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                 .n50(stats.meh.to_native())
                 .misses(stats.miss.to_native()))
             .calculate() else {
-                return println!("Failed to convert map at `{map_path}` to Mania");
+                println!("Failed to convert map at `{map_path}` to Mania");
+
+                return false;
             };
 
             PerformanceAttributes::Mania(attrs)
@@ -399,13 +441,18 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
 
     let output = match child.wait_with_output() {
         Ok(output) => output,
-        Err(err) => return println!("Failed to wait on child: {err}"),
+        Err(err) => {
+            println!("Failed to wait on child: {err}");
+
+            return false;
+        }
     };
 
     if !output.status.success() {
         let err = std::str::from_utf8(&output.stderr).unwrap_or("invalid UTF-8");
+        println!("Error for path `{map_path}`: {err}");
 
-        return println!("Error for path `{map_path}`: {err}");
+        return false;
     }
 
     let res = match mode {
@@ -434,7 +481,7 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                     });
                 }
 
-                return;
+                return false;
             }
 
             if let Err(not_eq) = assert_eq(&obj, attrs) {
@@ -445,9 +492,13 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                         cmd_str(&cmd),
                     );
                 });
+
+                false
             } else {
                 munge!(let ArchivedDataScore { mut checked, .. } = score);
                 *checked = true;
+
+                true
             }
         }
         Err(err) => {
@@ -457,6 +508,8 @@ fn calculate_score(score: Seal<'_, ArchivedDataScore>, progress: &ProgressBar) {
                 Ok(stdout) => println!("`{stdout}`: {err}"),
                 Err(_) => println!("Invalid UTF-8"),
             }
+
+            false
         }
     }
 }
