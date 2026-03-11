@@ -1,10 +1,16 @@
 use std::fmt;
 
-use rkyv::{rancor::{Fallible, Source}, ser::Writer, string::{ArchivedString, StringResolver}, with::{ArchiveWith,  SerializeWith}, Place};
-use serde_json::Number;
+use rkyv::{
+    rancor::{Fallible, Source},
+    ser::Writer,
+    string::{ArchivedString, StringResolver},
+    with::{ArchiveWith, SerializeWith},
+    Place,
+};
 use serde::de::{
     value::MapAccessDeserializer, Deserialize, Deserializer, Error, MapAccess, Visitor,
 };
+use serde_json::Number;
 
 #[derive(serde::Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct GameMods(Box<[GameMod]>);
@@ -37,10 +43,10 @@ impl ArchivedGameMods {
     }
 
     pub fn varying_clock_rate(&self) -> bool {
-        self.0.iter().any(|m| matches!(m.acronym.as_ref(), "WU" | "WD" | "AS"))
+        self.0
+            .iter()
+            .any(|m| matches!(m.acronym.as_ref(), "WU" | "WD" | "AS"))
     }
-    
-    
 
     pub fn contains_acronym(&self, acronym: &str) -> bool {
         self.acronyms().any(|a| a == acronym)
@@ -49,11 +55,11 @@ impl ArchivedGameMods {
     pub fn contains_classic(&self) -> bool {
         self.contains_acronym("CL")
     }
-    
+
     pub fn contains_random(&self) -> bool {
         self.contains_acronym("RD")
     }
-    
+
     pub fn convert(&self, mode: rosu_mods::GameMode) -> Result<rosu_mods::GameMods, String> {
         self.iter()
             .map(|m| {
@@ -100,7 +106,7 @@ impl ArchivedGameMods {
                             }
                         };
                     }
-                    
+
                     mutate_gamemod! {
                         [AccuracyChallengeOsu, AccuracyChallengeTaiko, AccuracyChallengeCatch, AccuracyChallengeMania] => [accuracy_judge_mode, minimum_accuracy, restart];
                         [AdaptiveSpeedOsu, AdaptiveSpeedTaiko, AdaptiveSpeedMania] => [adjust_pitch, initial_rate];
@@ -140,6 +146,39 @@ impl ArchivedGameMods {
                     };
                 }
 
+                let speed_change = match &mut gamemod {
+                    rosu_mods::GameMod::HalfTimeOsu(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DaycoreOsu(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DoubleTimeOsu(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::NightcoreOsu(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::HalfTimeTaiko(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DaycoreTaiko(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DoubleTimeTaiko(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::NightcoreTaiko(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::HalfTimeCatch(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DaycoreCatch(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DoubleTimeCatch(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::NightcoreCatch(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::HalfTimeMania(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DaycoreMania(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::DoubleTimeMania(m) => m.speed_change.as_mut(),
+                    rosu_mods::GameMod::NightcoreMania(m) => m.speed_change.as_mut(),
+                    _ => None,
+                };
+
+                if let Some(speed_change) = speed_change {
+                    // Lazer uses `Math.Round(value / precision) * precision`
+                    // with a precision of 0.01 but uses the decimal type. We
+                    // don't have this type and f64 causes issue e.g.
+                    // 0.7000000000000001 remains the same instead of 0.7.
+                    // Applying the inverse operation seems to work for this
+                    // counterexample so we use that instead.
+                    const PRECISION: f64 = 100.0;
+
+                    *speed_change = f64::round(*speed_change * PRECISION) / PRECISION;
+                }
+
+
                 Ok(gamemod)
             })
             .collect()
@@ -166,7 +205,6 @@ pub struct GameMod {
     #[serde(default, deserialize_with = "GameModSetting::deserialize_all")]
     pub settings: Box<[GameModSetting]>,
 }
-
 
 impl ArchivedGameMod {
     pub fn bits(&self) -> u32 {
@@ -220,11 +258,8 @@ pub struct GameModSetting {
     pub value: GameModSettingValue,
 }
 
-
 impl GameModSetting {
-    fn deserialize_all<'de, D: Deserializer<'de>>(
-        d: D,
-    ) -> Result<Box<[GameModSetting]>, D::Error> {
+    fn deserialize_all<'de, D: Deserializer<'de>>(d: D) -> Result<Box<[GameModSetting]>, D::Error> {
         struct SettingsVisitor;
 
         impl<'de> Visitor<'de> for SettingsVisitor {
@@ -263,20 +298,13 @@ impl ArchiveWith<Number> for AsStr {
     type Archived = ArchivedString;
     type Resolver = StringResolver;
 
-    fn resolve_with(
-        n: &Number,
-        resolver: Self::Resolver,
-        out: Place<Self::Archived>,
-    ) {
+    fn resolve_with(n: &Number, resolver: Self::Resolver, out: Place<Self::Archived>) {
         ArchivedString::resolve_from_str(n.as_str(), resolver, out);
     }
 }
 
 impl<S: Fallible<Error: Source> + Writer> SerializeWith<Number, S> for AsStr {
-    fn serialize_with(
-        n: &Number,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize_with(n: &Number, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedString::serialize_from_str(n.as_str(), serializer)
     }
 }
@@ -292,47 +320,46 @@ impl ArchivedGameModSettingValue {
     }
 }
 
+impl<'de> Deserialize<'de> for GameModSettingValue {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct ValueVisitor;
 
-    impl<'de> Deserialize<'de> for GameModSettingValue {
-        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-            struct ValueVisitor;
+        impl<'de> Visitor<'de> for ValueVisitor {
+            type Value = GameModSettingValue;
 
-            impl<'de> Visitor<'de> for ValueVisitor {
-                type Value = GameModSettingValue;
-
-                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                    f.write_str("a number, boolean, or string")
-                }
-
-                fn visit_bool<E: Error>(self, v: bool) -> Result<Self::Value, E> {
-                    Ok(GameModSettingValue::Bool(v))
-                }
-
-                fn visit_u64<E: Error>(self, v: u64) -> Result<Self::Value, E> {
-                    Ok(GameModSettingValue::Number(v.into()))
-                }
-
-                fn visit_i64<E: Error>(self, v: i64) -> Result<Self::Value, E> {
-                    Ok(GameModSettingValue::Number(v.into()))
-                }
-
-                fn visit_f64<E: Error>(self, v: f64) -> Result<Self::Value, E> {
-                    Ok(GameModSettingValue::Number(
-                        serde_json::Number::from_f64(v).unwrap(),
-                    ))
-                }
-
-                fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
-                    Ok(GameModSettingValue::Str(Box::from(v)))
-                }
-
-                fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-                    Number::deserialize(MapAccessDeserializer::new(map))
-                        .map(GameModSettingValue::Number)
-                        .map_err(Error::custom)
-                }
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a number, boolean, or string")
             }
 
-            d.deserialize_any(ValueVisitor)
+            fn visit_bool<E: Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(GameModSettingValue::Bool(v))
+            }
+
+            fn visit_u64<E: Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(GameModSettingValue::Number(v.into()))
+            }
+
+            fn visit_i64<E: Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(GameModSettingValue::Number(v.into()))
+            }
+
+            fn visit_f64<E: Error>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(GameModSettingValue::Number(
+                    serde_json::Number::from_f64(v).unwrap(),
+                ))
+            }
+
+            fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(GameModSettingValue::Str(Box::from(v)))
+            }
+
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                Number::deserialize(MapAccessDeserializer::new(map))
+                    .map(GameModSettingValue::Number)
+                    .map_err(Error::custom)
+            }
         }
+
+        d.deserialize_any(ValueVisitor)
     }
+}
