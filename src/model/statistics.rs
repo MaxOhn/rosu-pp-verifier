@@ -13,6 +13,9 @@ pub struct Statistics {
     pub large_tick_hit: u32,
     pub small_tick_hit: u32,
     pub slider_tail_hit: u32,
+    // Never read but for osu!catch it might be negative sometime which
+    // indicates that we should ignore the score.
+    pub small_tick_miss: u32,
 }
 
 impl Statistics {
@@ -30,42 +33,59 @@ impl Statistics {
 
 impl fmt::Debug for Statistics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            perfect,
+            great,
+            good,
+            ok,
+            meh,
+            miss,
+            large_tick_hit,
+            small_tick_hit,
+            slider_tail_hit,
+            small_tick_miss,
+        } = self;
+
         let mut debug = f.debug_struct("Statistics");
 
-        if self.perfect > 0 {
-            debug.field("perfect", &self.perfect);
+        if *perfect > 0 {
+            debug.field("perfect", perfect);
         }
 
-        if self.great > 0 {
-            debug.field("great", &self.great);
+        if *great > 0 {
+            debug.field("great", great);
         }
 
-        if self.good > 0 {
-            debug.field("good", &self.good);
+        if *good > 0 {
+            debug.field("good", good);
         }
 
-        if self.ok > 0 {
-            debug.field("ok", &self.ok);
+        if *ok > 0 {
+            debug.field("ok", ok);
         }
 
-        if self.meh > 0 {
-            debug.field("meh", &self.meh);
+        if *meh > 0 {
+            debug.field("meh", meh);
         }
 
-        if self.miss > 0 {
-            debug.field("miss", &self.miss);
+        if *miss > 0 {
+            debug.field("miss", miss);
         }
 
-        if self.large_tick_hit > 0 {
-            debug.field("large_tick_hit", &self.large_tick_hit);
+        if *large_tick_hit > 0 {
+            debug.field("large_tick_hit", large_tick_hit);
         }
 
-        if self.small_tick_hit > 0 {
-            debug.field("small_tick_hit", &self.small_tick_hit);
+        if *small_tick_hit > 0 {
+            debug.field("small_tick_hit", small_tick_hit);
         }
 
-        if self.slider_tail_hit > 0 {
-            debug.field("slider_tail_hit", &self.slider_tail_hit);
+        if *small_tick_miss > 0 {
+            debug.field("small_tick_miss", small_tick_miss);
+        }
+
+        if *slider_tail_hit > 0 {
+            debug.field("slider_tail_hit", slider_tail_hit);
         }
 
         debug.finish()
@@ -74,42 +94,59 @@ impl fmt::Debug for Statistics {
 
 impl fmt::Debug for ArchivedStatistics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            perfect,
+            great,
+            good,
+            ok,
+            meh,
+            miss,
+            large_tick_hit,
+            small_tick_hit,
+            slider_tail_hit,
+            small_tick_miss,
+        } = self;
+
         let mut debug = f.debug_struct("Statistics");
 
-        if self.perfect > 0 {
-            debug.field("perfect", &self.perfect);
+        if *perfect > 0 {
+            debug.field("perfect", perfect);
         }
 
-        if self.great > 0 {
-            debug.field("great", &self.great);
+        if *great > 0 {
+            debug.field("great", great);
         }
 
-        if self.good > 0 {
-            debug.field("good", &self.good);
+        if *good > 0 {
+            debug.field("good", good);
         }
 
-        if self.ok > 0 {
-            debug.field("ok", &self.ok);
+        if *ok > 0 {
+            debug.field("ok", ok);
         }
 
-        if self.meh > 0 {
-            debug.field("meh", &self.meh);
+        if *meh > 0 {
+            debug.field("meh", meh);
         }
 
-        if self.miss > 0 {
-            debug.field("miss", &self.miss);
+        if *miss > 0 {
+            debug.field("miss", miss);
         }
 
-        if self.large_tick_hit > 0 {
-            debug.field("large_tick_hit", &self.large_tick_hit);
+        if *large_tick_hit > 0 {
+            debug.field("large_tick_hit", large_tick_hit);
         }
 
-        if self.small_tick_hit > 0 {
-            debug.field("small_tick_hit", &self.small_tick_hit);
+        if *small_tick_hit > 0 {
+            debug.field("small_tick_hit", small_tick_hit);
         }
 
-        if self.slider_tail_hit > 0 {
-            debug.field("slider_tail_hit", &self.slider_tail_hit);
+        if *small_tick_miss > 0 {
+            debug.field("small_tick_miss", small_tick_miss);
+        }
+
+        if *slider_tail_hit > 0 {
+            debug.field("slider_tail_hit", slider_tail_hit);
         }
 
         debug.finish()
