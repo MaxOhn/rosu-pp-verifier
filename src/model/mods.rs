@@ -138,6 +138,7 @@ impl ArchivedGameMods {
                         [RandomOsu] => [angle_sharpness, seed];
                         [RandomTaiko, RandomMania] => [seed];
                         [RepelOsu] => [repulsion_strength];
+                        [SimplifiedRhythmTaiko] => [one_third_conversion, one_sixth_conversion, one_eighth_conversion];
                         [SuddenDeathOsu, SuddenDeathTaiko, SuddenDeathCatch, SuddenDeathMania] => [restart];
                         [TargetPracticeOsu] => [seed];
                         [WiggleOsu] => [strength];
