@@ -252,7 +252,6 @@ impl fmt::Debug for ArchivedGameMod {
 }
 
 #[derive(Debug, serde::Deserialize, rkyv::Archive, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub struct GameModSetting {
     pub key: Box<str>,
     pub value: GameModSettingValue,
@@ -284,12 +283,34 @@ impl GameModSetting {
     }
 }
 
+// Manual impl because ArchivedBox's Debug impl is not particularly useful
+impl fmt::Debug for ArchivedGameModSetting {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Self { key, value } = self;
+
+        f.debug_struct("ArchivedGameModSetting")
+            .field("key", &key.as_ref())
+            .field("value", value)
+            .finish()
+    }
+}
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize)]
-#[rkyv(derive(Debug))]
 pub enum GameModSettingValue {
     Number(#[rkyv(with = AsStr)] Number),
     Bool(bool),
     Str(Box<str>),
+}
+
+// Manual impl because ArchivedBox's Debug impl is not particularly useful
+impl fmt::Debug for ArchivedGameModSettingValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(value) => f.debug_tuple("Number").field(&value.as_str()).finish(),
+            Self::Bool(value) => f.debug_tuple("Bool").field(value).finish(),
+            Self::Str(value) => f.debug_tuple("Str").field(&value.as_ref()).finish(),
+        }
+    }
 }
 
 struct AsStr;
